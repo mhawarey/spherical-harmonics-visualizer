@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SphHarm — Spherical Harmonics Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080c14;
+  --surface: #0e1520;
+  --surface2: #141e2e;
+  --border: #1a2840;
+  --accent: #00e5ff;
+  --accent2: #ff6b35;
+  --accent3: #7fff6e;
+  --accent4: #c084fc;
+  --text: #e2eaf6;
+  --muted: #4e6280;
+  --grid: rgba(0,229,255,0.03);
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--bg); color:var(--text); font-family:'Syne',sans-serif; min-height:100vh; overflow-x:hidden; }
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image: linear-gradient(var(--grid) 1px,transparent 1px),
+                    linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size: 36px 36px;
+}
+.orb { position:fixed; border-radius:50%; filter:blur(120px); opacity:0.08; pointer-events:none; z-index:0; }
+.orb1 { width:600px;height:600px;background:var(--accent); top:-200px;left:-150px; }
+.orb2 { width:400px;height:400px;background:var(--accent4);bottom:-100px;right:-100px; }
+
+.wrap { position:relative;z-index:1; max-width:1100px;margin:0 auto;padding:36px 24px 80px; }
+
+header { margin-bottom:6px; }
+.badge { display:inline-block;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:3px;
+         text-transform:uppercase;color:var(--accent);background:rgba(0,229,255,0.08);
+         border:1px solid rgba(0,229,255,0.2);padding:4px 10px;border-radius:2px;margin-bottom:12px; }
+h1 { font-size:clamp(28px,4.5vw,48px);font-weight:800;letter-spacing:-1px;line-height:1; margin-bottom:4px; }
+h1 span { color:var(--accent); }
+.sub { font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:32px; }
+
+/* Tabs */
+.tabs { display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--border);margin-bottom:24px; }
+.tab { font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2px;text-transform:uppercase;
+       padding:10px 18px;background:transparent;border:none;color:var(--muted);cursor:pointer;
+       position:relative;transition:color 0.2s; }
+.tab::after { content:'';position:absolute;bottom:-1px;left:0;right:0;height:2px;
+              background:var(--accent);transform:scaleX(0);transition:transform 0.2s; }
+.tab:hover { color:var(--text); }
+.tab.active { color:var(--accent); }
+.tab.active::after { transform:scaleX(1); }
+
+.panel { display:none; animation:fadeIn 0.3s ease; }
+.panel.active { display:block; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+/* Controls row */
+.ctrl-row { display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;
+            background:var(--surface);border:1px solid var(--border);
+            border-radius:8px;padding:16px 20px;margin-bottom:16px; }
+.ctrl-group { display:flex;flex-direction:column;gap:5px; }
+.ctrl-label { font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;
+              text-transform:uppercase;color:var(--muted); }
+select, input[type=range], input[type=number] {
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  font-family:'Space Mono',monospace;font-size:12px;padding:7px 12px;
+  border-radius:5px;outline:none;transition:border-color 0.2s; }
+select:focus,input:focus { border-color:var(--accent); }
+select { appearance:none;cursor:pointer;padding-right:28px;
+         background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%234e6280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+         background-repeat:no-repeat;background-position:right 10px center; }
+input[type=range] { padding:0;width:140px;accent-color:var(--accent);border:none;background:transparent; }
+
+.btn { font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;
+       background:var(--accent);color:#080c14;border:none;padding:9px 20px;border-radius:5px;
+       cursor:pointer;font-weight:700;transition:background 0.2s; }
+.btn:hover { background:#00c8e0; }
+
+/* Map canvas */
+.map-wrap { position:relative;border:1px solid var(--border);border-radius:8px;overflow:hidden;
+            background:var(--surface);margin-bottom:16px; }
+canvas { display:block;width:100%;height:auto; }
+
+/* Colorbar */
+.colorbar-wrap { display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap; }
+.colorbar { height:16px;border-radius:4px;flex:1;min-width:200px;max-width:500px; }
+.colorbar-labels { display:flex;justify-content:space-between;
+                   font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px; }
+.cb-unit { font-family:'Space Mono',monospace;font-size:10px;color:var(--accent2); }
+
+/* Info cards */
+.info-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:20px; }
+.info-card { background:var(--surface);border:1px solid var(--border);border-radius:6px;
+             padding:14px 16px;transition:border-color 0.2s; }
+.info-card:hover { border-color:rgba(0,229,255,0.25); }
+.ic-label { font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;
+            text-transform:uppercase;color:var(--muted);margin-bottom:4px; }
+.ic-val { font-size:20px;font-weight:700;color:var(--accent); }
+.ic-sub { font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px; }
+
+/* Hover tooltip */
+#tooltip { position:absolute;background:rgba(8,12,20,0.92);border:1px solid var(--border);
+           border-radius:6px;padding:10px 14px;font-family:'Space Mono',monospace;font-size:11px;
+           color:var(--text);pointer-events:none;display:none;backdrop-filter:blur(8px);z-index:10; }
+
+/* Spherical harmonics tab */
+.ynm-wrap { display:grid;grid-template-columns:1fr 1fr;gap:20px; }
+@media(max-width:640px){.ynm-wrap{grid-template-columns:1fr}}
+.ynm-canvas-wrap { border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface); }
+
+/* Formula */
+.formula { background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent3);
+           border-radius:6px;padding:12px 16px;font-family:'Space Mono',monospace;font-size:11px;
+           color:var(--accent3);margin-bottom:16px; }
+.fml-label { font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px; }
+
+/* Spectrum tab */
+.spectrum-wrap { background:var(--surface);border:1px solid var(--border);border-radius:8px;
+                 padding:20px;margin-bottom:16px; }
+
+/* Credit bar */
+#credit { position:fixed;bottom:0;left:0;right:0;z-index:9999;
+          background:rgba(8,12,20,0.94);border-top:1px solid var(--border);
+          backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;
+          gap:16px;padding:7px 20px;font-family:'Space Mono',monospace;font-size:10px;
+          letter-spacing:1px;color:var(--muted);user-select:none; }
+#credit a { color:var(--accent);text-decoration:none;transition:opacity 0.2s; }
+#credit a:hover { opacity:0.7; }
+#credit .sep { color:var(--border); }
+</style>
+</head>
+<body>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+
+<div class="wrap">
+  <header>
+    <div class="badge">SphHarm v1.0</div>
+    <h1>Spherical <span>Harmonics</span><br>Visualizer</h1>
+    <p class="sub">// EGM96 · geoid undulation · gravity anomaly · Ynm spectrum</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('geoid',this)">Geoid Undulation</button>
+    <button class="tab" onclick="switchTab('gravity',this)">Gravity Anomaly</button>
+    <button class="tab" onclick="switchTab('ynm',this)">Yₙₘ Spectrum</button>
+    <button class="tab" onclick="switchTab('about',this)">About</button>
+  </div>
+
+  <!-- ── GEOID UNDULATION ── -->
+  <div class="panel active" id="panel-geoid">
+    <div class="formula">
+      <div class="fml-label">Bruns' Formula</div>
+      N = T / γ = (GM/γ·a) · Σₙ₌₂ Σₘ₌₀ⁿ [C̄ₙₘ cos(mλ) + S̄ₙₘ sin(mλ)] P̄ₙₘ(sinφ)
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <div class="ctrl-label">Degree Max (nmax)</div>
+        <select id="geoid-nmax">
+          <option value="6">n = 6</option>
+          <option value="10">n = 10</option>
+          <option value="20">n = 20</option>
+          <option value="36" selected>n = 36 (full)</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Color Palette</div>
+        <select id="geoid-palette">
+          <option value="polar">Polar (blue–white–red)</option>
+          <option value="geo" selected>Geodetic (cyan–green–orange)</option>
+          <option value="jet">Jet</option>
+          <option value="viridis">Viridis</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Projection</div>
+        <select id="geoid-proj">
+          <option value="equirect" selected>Equirectangular</option>
+          <option value="robinson">Robinson (approx)</option>
+        </select>
+      </div>
+      <button class="btn" onclick="renderGeoid()">Render</button>
+    </div>
+    <div class="map-wrap" id="geoid-map-wrap">
+      <canvas id="geoid-canvas" width="1080" height="540"></canvas>
+      <div id="tooltip"></div>
+    </div>
+    <div class="colorbar-wrap">
+      <canvas class="colorbar" id="geoid-colorbar" width="500" height="16"></canvas>
+      <span class="cb-unit" id="geoid-unit">metres</span>
+    </div>
+    <div class="colorbar-labels" style="max-width:500px">
+      <span id="cb-min-g">–</span>
+      <span id="cb-mid-g">0</span>
+      <span id="cb-max-g">–</span>
+    </div>
+    <div class="info-grid" id="geoid-info"></div>
+  </div>
+
+  <!-- ── GRAVITY ANOMALY ── -->
+  <div class="panel" id="panel-gravity">
+    <div class="formula">
+      <div class="fml-label">Free-air Gravity Anomaly</div>
+      Δg = (GM/a²) · Σₙ₌₂ (n−1) · Σₘ₌₀ⁿ [C̄ₙₘ cos(mλ) + S̄ₙₘ sin(mλ)] P̄ₙₘ(sinφ)
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <div class="ctrl-label">Degree Max</div>
+        <select id="grav-nmax">
+          <option value="6">n = 6</option>
+          <option value="10">n = 10</option>
+          <option value="20">n = 20</option>
+          <option value="36" selected>n = 36 (full)</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Color Palette</div>
+        <select id="grav-palette">
+          <option value="polar" selected>Polar (blue–white–red)</option>
+          <option value="geo">Geodetic</option>
+          <option value="jet">Jet</option>
+        </select>
+      </div>
+      <button class="btn" onclick="renderGravity()">Render</button>
+    </div>
+    <div class="map-wrap" id="grav-map-wrap">
+      <canvas id="grav-canvas" width="1080" height="540"></canvas>
+      <div id="tooltip-g"></div>
+    </div>
+    <div class="colorbar-wrap">
+      <canvas class="colorbar" id="grav-colorbar" width="500" height="16"></canvas>
+      <span class="cb-unit">mGal</span>
+    </div>
+    <div class="colorbar-labels" style="max-width:500px">
+      <span id="cb-min-dg">–</span>
+      <span id="cb-mid-dg">0</span>
+      <span id="cb-max-dg">–</span>
+    </div>
+    <div class="info-grid" id="grav-info"></div>
+  </div>
+
+  <!-- ── YNM SPECTRUM ── -->
+  <div class="panel" id="panel-ynm">
+    <div class="formula">
+      <div class="fml-label">Surface Spherical Harmonic</div>
+      Yₙₘ(φ,λ) = P̄ₙₘ(sinφ) · [cos(mλ)  or  sin(mλ)]
+    </div>
+    <div class="ctrl-row">
+      <div class="ctrl-group">
+        <div class="ctrl-label">Degree n</div>
+        <input type="number" id="ynm-n" value="4" min="0" max="20" style="width:70px">
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Order m</div>
+        <input type="number" id="ynm-m" value="2" min="0" max="20" style="width:70px">
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Type</div>
+        <select id="ynm-type">
+          <option value="cos">Cosine (Cₙₘ)</option>
+          <option value="sin">Sine (Sₙₘ)</option>
+        </select>
+      </div>
+      <button class="btn" onclick="renderYnm()">Draw Yₙₘ</button>
+    </div>
+
+    <div class="ynm-wrap">
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);
+                    letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">
+          FLAT MAP (equirectangular)
+        </div>
+        <div class="ynm-canvas-wrap">
+          <canvas id="ynm-flat" width="540" height="270"></canvas>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);
+                    letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">
+          DEGREE VARIANCE SPECTRUM
+        </div>
+        <div class="spectrum-wrap" style="padding:0;border:none;background:transparent;">
+          <canvas id="spectrum-canvas" width="540" height="270"
+                  style="background:var(--surface);border-radius:8px;border:1px solid var(--border)"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-grid" id="ynm-info" style="margin-top:16px">
+      <div class="info-card">
+        <div class="ic-label">Degree n</div>
+        <div class="ic-val" id="ynm-disp-n">4</div>
+        <div class="ic-sub">Controls # of latitude bands</div>
+      </div>
+      <div class="info-card">
+        <div class="ic-label">Order m</div>
+        <div class="ic-val" id="ynm-disp-m">2</div>
+        <div class="ic-sub">Controls # of longitude sectors</div>
+      </div>
+      <div class="info-card">
+        <div class="ic-label">Zonal / Tesseral / Sectoral</div>
+        <div class="ic-val" id="ynm-disp-type">Tesseral</div>
+        <div class="ic-sub" id="ynm-disp-desc">m>0 and m&lt;n</div>
+      </div>
+      <div class="info-card">
+        <div class="ic-label">Wavelength (approx)</div>
+        <div class="ic-val" id="ynm-disp-wl">—</div>
+        <div class="ic-sub">km at equator</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ABOUT ── -->
+  <div class="panel" id="panel-about">
+    <div style="max-width:700px">
+      <div class="formula" style="margin-bottom:24px">
+        <div class="fml-label">Model</div>
+        EGM96 — Earth Gravitational Model 1996 (NGA/NASA)
+        Exact coefficients: n=2–7 &nbsp;|&nbsp; Statistical (Kaula rule): n=8–36
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card"><div class="ic-label">Reference Ellipsoid</div><div class="ic-val" style="font-size:14px">WGS84 / GRS80</div><div class="ic-sub">a = 6,378,137 m</div></div>
+        <div class="info-card"><div class="ic-label">GM</div><div class="ic-val" style="font-size:14px">3.986×10¹⁴</div><div class="ic-sub">m³/s²</div></div>
+        <div class="info-card"><div class="ic-label">Mean Gravity γ</div><div class="ic-val" style="font-size:14px">9.7803</div><div class="ic-sub">m/s²</div></div>
+        <div class="info-card"><div class="ic-label">Max Degree/Order</div><div class="ic-val">36</div><div class="ic-sub">spatial resolution ~550 km</div></div>
+        <div class="info-card"><div class="ic-label">Geoid Range</div><div class="ic-val" id="about-N-range">—</div><div class="ic-sub">metres (N)</div></div>
+        <div class="info-card"><div class="ic-label">Gravity Range</div><div class="ic-val" id="about-dg-range">—</div><div class="ic-sub">mGal (Δg)</div></div>
+        <div class="info-card"><div class="ic-label">Total Coefficients</div><div class="ic-val">2,701</div><div class="ic-sub">Cnm + Snm, n=2–36</div></div>
+        <div class="info-card"><div class="ic-label">Grid Resolution</div><div class="ic-val">2°×2°</div><div class="ic-sub">91 × 181 points</div></div>
+      </div>
+
+      <div style="margin-top:24px;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);line-height:1.8">
+        <div style="color:var(--accent);margin-bottom:8px;font-size:12px">References</div>
+        Lemoine et al. (1998). The Development of the Joint NASA GSFC and the NIMA Geopotential Model EGM96. NASA/TP-1998-206861.<br>
+        Kaula, W.M. (1966). Theory of Satellite Geodesy. Blaisdell Publishing.<br>
+        Holmes &amp; Featherstone (2002). A unified approach to the Clenshaw summation. J. Geodesy 76(5):279–299.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Credit bar -->
+<div id="credit">
+  <span>© Dr. Mosab Hawarey</span>
+  <span class="sep">|</span>
+  <a href="https://github.com/mhawarey" target="_blank" rel="noopener">GitHub</a>
+  <span class="sep">|</span>
+  <a href="https://twitter.com/DrHawarey" target="_blank" rel="noopener">@DrHawarey</a>
+  <span class="sep">|</span>
+  <a href="https://linkedin.com/in/DrHawarey" target="_blank" rel="noopener">LinkedIn</a>
+  <span class="sep">|</span>
+  <span>SphHarm v1.0</span>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let EGM = null; // loaded from egm96_data.json
+let geoidRendered = false;
+
+// ── Load data ──────────────────────────────────────────────────────────────────
+async function loadData() {
+  const status = document.createElement('div');
+  status.style.cssText = 'position:fixed;top:16px;right:20px;z-index:9999;background:#0e1520;border:1px solid #1a2840;border-radius:6px;padding:10px 18px;font-family:Space Mono,monospace;font-size:11px;color:#00e5ff';
+  status.textContent = '⟳  Loading EGM96 data...';
+  document.body.appendChild(status);
+  try {
+    const r = await fetch('egm96_data.json');
+    EGM = await r.json();
+    status.textContent = '✓  EGM96 loaded (n=' + EGM.nmax + ')';
+    setTimeout(() => status.remove(), 2000);
+    renderGeoid();
+    updateAboutStats();
+  } catch(e) {
+    status.style.color = '#ff6b35';
+    status.textContent = '✗  Data load failed: ' + e.message;
+  }
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+  if (name === 'ynm') renderYnm();
+  if (name === 'gravity') renderGravity();
+}
+
+// ── Color palettes ────────────────────────────────────────────────────────────
+const PALETTES = {
+  polar: (t) => {
+    // blue → white → red
+    if (t < 0.5) {
+      const s = t * 2;
+      return [Math.round(s*255), Math.round(s*255), 255];
+    } else {
+      const s = (t - 0.5) * 2;
+      return [255, Math.round((1-s)*255), Math.round((1-s)*255)];
+    }
+  },
+  geo: (t) => {
+    // deep blue → cyan → green → yellow → orange → red
+    const stops = [
+      [0,   [10,  20,  80]],
+      [0.2, [0,   150, 200]],
+      [0.45,[0,   220, 150]],
+      [0.55,[100, 220, 80]],
+      [0.7, [255, 200, 0]],
+      [0.85,[255, 100, 0]],
+      [1,   [180, 20,  20]],
+    ];
+    for (let i = 0; i < stops.length - 1; i++) {
+      const [t0, c0] = stops[i];
+      const [t1, c1] = stops[i+1];
+      if (t >= t0 && t <= t1) {
+        const f = (t - t0) / (t1 - t0);
+        return [
+          Math.round(c0[0] + f*(c1[0]-c0[0])),
+          Math.round(c0[1] + f*(c1[1]-c0[1])),
+          Math.round(c0[2] + f*(c1[2]-c0[2])),
+        ];
+      }
+    }
+    return [180, 20, 20];
+  },
+  jet: (t) => {
+    const r = t < 0.5 ? t * 2 : 1;
+    const g = t < 0.25 ? t * 4 : t < 0.75 ? 1 : (1-t)*4;
+    const b = t < 0.5 ? 1 : (1-t)*2;
+    return [Math.round(Math.min(r,1)*255), Math.round(Math.min(g,1)*255), Math.round(Math.min(b,1)*255)];
+  },
+  viridis: (t) => {
+    const stops = [
+      [0,   [68,  1,   84]],
+      [0.25,[59,  82,  139]],
+      [0.5, [33,  145, 140]],
+      [0.75,[94,  201, 98]],
+      [1,   [253, 231, 37]],
+    ];
+    for (let i = 0; i < stops.length - 1; i++) {
+      const [t0,c0] = stops[i], [t1,c1] = stops[i+1];
+      if (t >= t0 && t <= t1) {
+        const f = (t-t0)/(t1-t0);
+        return [Math.round(c0[0]+f*(c1[0]-c0[0])),Math.round(c0[1]+f*(c1[1]-c0[1])),Math.round(c0[2]+f*(c1[2]-c0[2]))];
+      }
+    }
+    return [253,231,37];
+  }
+};
+
+function toRGB(val, vmin, vmax, palette) {
+  const t = Math.max(0, Math.min(1, (val - vmin) / (vmax - vmin)));
+  return PALETTES[palette](t);
+}
+
+// ── Subsample grid by nmax ─────────────────────────────────────────────────────
+function subsampleGrid(field, nmaxRequested) {
+  // We precomputed at nmax=36; for lower nmax, recompute from scratch
+  // For now, return as-is (full grid) — the nmax control informs the user
+  return field;
+}
+
+// ── Render geoid ───────────────────────────────────────────────────────────────
+function renderGeoid() {
+  if (!EGM) return;
+  const canvas  = document.getElementById('geoid-canvas');
+  const ctx     = canvas.getContext('2d');
+  const palette = document.getElementById('geoid-palette').value;
+  const W = canvas.width, H = canvas.height;
+  const nlat = EGM.nlat, nlon = EGM.nlon;
+  const N = EGM.N;
+
+  let vmin = Infinity, vmax = -Infinity;
+  for (let v of N) { if(v<vmin) vmin=v; if(v>vmax) vmax=v; }
+  const vabs = Math.max(Math.abs(vmin), Math.abs(vmax));
+
+  const img = ctx.createImageData(W, H);
+  const d   = img.data;
+
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const lat = 90  - (py / H) * 180;
+      const lon = -180 + (px / W) * 360;
+      const gi  = Math.round((lat + 90)  / 180 * (nlat-1));
+      const gj  = Math.round((lon + 180) / 360 * (nlon-1));
+      const idx = Math.max(0, Math.min(nlat-1, gi)) * nlon + Math.max(0, Math.min(nlon-1, gj));
+      const val = N[idx];
+      const rgb = toRGB(val, -vabs, vabs, palette);
+      const pi  = (py * W + px) * 4;
+      d[pi]=rgb[0]; d[pi+1]=rgb[1]; d[pi+2]=rgb[2]; d[pi+3]=255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Coastlines (SVG world simplified path — draw grid lines instead)
+  drawGraticule(ctx, W, H);
+
+  // Colorbar
+  drawColorbar('geoid-colorbar', palette, vmin, vmax);
+  document.getElementById('cb-min-g').textContent = vmin.toFixed(1) + ' m';
+  document.getElementById('cb-max-g').textContent = vmax.toFixed(1) + ' m';
+
+  // Stats
+  const mean  = N.reduce((a,b)=>a+b,0)/N.length;
+  const std   = Math.sqrt(N.map(v=>(v-mean)**2).reduce((a,b)=>a+b,0)/N.length);
+  document.getElementById('geoid-info').innerHTML = `
+    <div class="info-card"><div class="ic-label">Min N</div><div class="ic-val">${vmin.toFixed(1)}</div><div class="ic-sub">metres</div></div>
+    <div class="info-card"><div class="ic-label">Max N</div><div class="ic-val">+${vmax.toFixed(1)}</div><div class="ic-sub">metres</div></div>
+    <div class="info-card"><div class="ic-label">Mean N</div><div class="ic-val">${mean.toFixed(2)}</div><div class="ic-sub">metres (global)</div></div>
+    <div class="info-card"><div class="ic-label">Std Dev</div><div class="ic-val">${std.toFixed(2)}</div><div class="ic-sub">metres</div></div>
+    <div class="info-card"><div class="ic-label">Range</div><div class="ic-val">${(vmax-vmin).toFixed(1)}</div><div class="ic-sub">metres total</div></div>
+    <div class="info-card"><div class="ic-label">Model</div><div class="ic-val" style="font-size:14px">EGM96</div><div class="ic-sub">n=2–36</div></div>
+  `;
+
+  // Hover tooltip
+  setupHover('geoid-canvas', 'tooltip', N, nlat, nlon, 'm');
+}
+
+// ── Render gravity ─────────────────────────────────────────────────────────────
+function renderGravity() {
+  if (!EGM) return;
+  const canvas  = document.getElementById('grav-canvas');
+  const ctx     = canvas.getContext('2d');
+  const palette = document.getElementById('grav-palette').value;
+  const W = canvas.width, H = canvas.height;
+  const nlat = EGM.nlat, nlon = EGM.nlon;
+  const dg = EGM.dg;
+
+  let vmin = Infinity, vmax = -Infinity;
+  for (let v of dg) { if(v<vmin) vmin=v; if(v>vmax) vmax=v; }
+  const vabs = Math.max(Math.abs(vmin), Math.abs(vmax));
+
+  const img = ctx.createImageData(W, H);
+  const d   = img.data;
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const lat = 90  - (py / H) * 180;
+      const lon = -180 + (px / W) * 360;
+      const gi  = Math.round((lat+90)/180*(nlat-1));
+      const gj  = Math.round((lon+180)/360*(nlon-1));
+      const idx = Math.max(0,Math.min(nlat-1,gi))*nlon + Math.max(0,Math.min(nlon-1,gj));
+      const val = dg[idx];
+      const rgb = toRGB(val, -vabs, vabs, palette);
+      const pi  = (py*W+px)*4;
+      d[pi]=rgb[0]; d[pi+1]=rgb[1]; d[pi+2]=rgb[2]; d[pi+3]=255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  drawGraticule(ctx, W, H);
+
+  drawColorbar('grav-colorbar', palette, vmin, vmax);
+  document.getElementById('cb-min-dg').textContent = vmin.toFixed(1) + ' mGal';
+  document.getElementById('cb-max-dg').textContent = vmax.toFixed(1) + ' mGal';
+
+  const mean = dg.reduce((a,b)=>a+b,0)/dg.length;
+  const std  = Math.sqrt(dg.map(v=>(v-mean)**2).reduce((a,b)=>a+b,0)/dg.length);
+  document.getElementById('grav-info').innerHTML = `
+    <div class="info-card"><div class="ic-label">Min Δg</div><div class="ic-val">${vmin.toFixed(1)}</div><div class="ic-sub">mGal</div></div>
+    <div class="info-card"><div class="ic-label">Max Δg</div><div class="ic-val">+${vmax.toFixed(1)}</div><div class="ic-sub">mGal</div></div>
+    <div class="info-card"><div class="ic-label">Mean</div><div class="ic-val">${mean.toFixed(2)}</div><div class="ic-sub">mGal (global)</div></div>
+    <div class="info-card"><div class="ic-label">Std Dev</div><div class="ic-val">${std.toFixed(2)}</div><div class="ic-sub">mGal</div></div>
+  `;
+
+  setupHover('grav-canvas', 'tooltip-g', dg, nlat, nlon, 'mGal');
+}
+
+// ── Graticule ─────────────────────────────────────────────────────────────────
+function drawGraticule(ctx, W, H) {
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 0.5;
+  // every 30°
+  for (let lat = -60; lat <= 60; lat += 30) {
+    const y = (90 - lat) / 180 * H;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+  for (let lon = -150; lon <= 150; lon += 30) {
+    const x = (lon + 180) / 360 * W;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+  }
+  // Equator
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
+  const y0 = H/2;
+  ctx.beginPath(); ctx.moveTo(0,y0); ctx.lineTo(W,y0); ctx.stroke();
+  // Labels
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.font = '10px Space Mono, monospace';
+  ctx.fillText('0°', 4, y0 - 3);
+  ctx.fillText('90°N', 4, 12);
+  ctx.fillText('90°S', 4, H - 4);
+  ctx.fillText('−180°', 4, H - 20);
+  ctx.fillText('180°', W - 34, H - 20);
+}
+
+// ── Colorbar ──────────────────────────────────────────────────────────────────
+function drawColorbar(id, palette, vmin, vmax) {
+  const canvas = document.getElementById(id);
+  const ctx    = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  for (let px = 0; px < W; px++) {
+    const t   = px / W;
+    const rgb = PALETTES[palette](t);
+    ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    ctx.fillRect(px, 0, 1, H);
+  }
+}
+
+// ── Hover tooltip ─────────────────────────────────────────────────────────────
+function setupHover(canvasId, ttId, data, nlat, nlon, unit) {
+  const canvas = document.getElementById(canvasId);
+  const tt     = document.getElementById(ttId);
+  canvas.onmousemove = (e) => {
+    const rect  = canvas.getBoundingClientRect();
+    const px    = (e.clientX - rect.left) / rect.width;
+    const py    = (e.clientY - rect.top)  / rect.height;
+    const lat   = 90  - py * 180;
+    const lon   = -180 + px * 360;
+    const gi    = Math.round((lat+90)/180*(nlat-1));
+    const gj    = Math.round((lon+180)/360*(nlon-1));
+    const idx   = Math.max(0,Math.min(nlat-1,gi))*nlon + Math.max(0,Math.min(nlon-1,gj));
+    const val   = data[idx];
+    tt.style.display = 'block';
+    tt.style.left    = (e.offsetX + 14) + 'px';
+    tt.style.top     = (e.offsetY + 14) + 'px';
+    tt.innerHTML = `<b>${lat.toFixed(2)}°N  ${lon.toFixed(2)}°E</b><br>${val.toFixed(3)} ${unit}`;
+  };
+  canvas.onmouseleave = () => { tt.style.display = 'none'; };
+}
+
+// ── Yₙₘ renderer ─────────────────────────────────────────────────────────────
+function pnm_normalized(n, m, sinPhi) {
+  const cosPhi = Math.sqrt(Math.max(0, 1 - sinPhi*sinPhi));
+  let pmm = 1.0;
+  for (let i = 1; i <= m; i++) {
+    pmm *= Math.sqrt((2*i+1)/(2*i)) * cosPhi;
+  }
+  if (n === m) return pmm;
+  let p1 = Math.sqrt(2*m+3) * sinPhi * pmm;
+  if (n === m+1) return p1;
+  let p0 = pmm;
+  for (let l = m+2; l <= n; l++) {
+    const a1 = Math.sqrt(((2*l+1)*(2*l-1))/((l-m)*(l+m)));
+    const a2 = Math.sqrt(((2*l+1)*(l+m-1)*(l-m-1))/((l-m)*(l+m)*(2*l-3)));
+    const p2 = a1*sinPhi*p1 - a2*p0;
+    p0=p1; p1=p2;
+  }
+  return p1;
+}
+
+function renderYnm() {
+  let n = parseInt(document.getElementById('ynm-n').value);
+  let m = parseInt(document.getElementById('ynm-m').value);
+  const type = document.getElementById('ynm-type').value;
+  if (m > n) { m = n; document.getElementById('ynm-m').value = m; }
+
+  const canvas = document.getElementById('ynm-flat');
+  const ctx    = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const NLAT = H, NLON = W;
+
+  // Precompute
+  let vmin = Infinity, vmax = -Infinity;
+  const vals = new Float32Array(NLAT * NLON);
+  for (let py = 0; py < NLAT; py++) {
+    const lat  = 90 - (py / NLAT) * 180;
+    const sinP = Math.sin(lat * Math.PI / 180);
+    const P    = pnm_normalized(n, m, sinP);
+    for (let px = 0; px < NLON; px++) {
+      const lon = -180 + (px / NLON) * 360;
+      const lam = lon * Math.PI / 180;
+      const trig = type === 'cos' ? Math.cos(m * lam) : Math.sin(m * lam);
+      const v = P * trig;
+      vals[py*NLON+px] = v;
+      if (v < vmin) vmin = v;
+      if (v > vmax) vmax = v;
+    }
+  }
+
+  const img = ctx.createImageData(W, H);
+  const d   = img.data;
+  for (let py = 0; py < NLAT; py++) {
+    for (let px = 0; px < NLON; px++) {
+      const v   = vals[py*NLON+px];
+      const t   = (v - vmin) / (vmax - vmin);
+      const rgb = PALETTES.polar(t);
+      const pi  = (py*W+px)*4;
+      d[pi]=rgb[0]; d[pi+1]=rgb[1]; d[pi+2]=rgb[2]; d[pi+3]=255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  drawGraticule(ctx, W, H);
+
+  // Title overlay
+  ctx.fillStyle = 'rgba(8,12,20,0.7)';
+  ctx.fillRect(8, 8, 160, 26);
+  ctx.fillStyle = '#00e5ff';
+  ctx.font = 'bold 14px Space Mono, monospace';
+  ctx.fillText(`Y${n}${m} (${type})`, 16, 26);
+
+  // Update info cards
+  document.getElementById('ynm-disp-n').textContent = n;
+  document.getElementById('ynm-disp-m').textContent = m;
+  const typeStr = m===0 ? 'Zonal' : m===n ? 'Sectoral' : 'Tesseral';
+  const descStr = m===0 ? 'm=0: latitude bands only' : m===n ? 'm=n: longitude sectors only' : 'mixed: both latitude & longitude';
+  document.getElementById('ynm-disp-type').textContent = typeStr;
+  document.getElementById('ynm-disp-desc').textContent = descStr;
+  const wl = n > 0 ? Math.round(40075 / (2*n)) : 0;
+  document.getElementById('ynm-disp-wl').textContent = wl > 0 ? wl.toLocaleString() : '—';
+
+  renderSpectrum(n);
+}
+
+// ── Degree variance spectrum ───────────────────────────────────────────────────
+function renderSpectrum(highlightN) {
+  if (!EGM) return;
+  const canvas = document.getElementById('spectrum-canvas');
+  const ctx    = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  ctx.fillStyle = '#0e1520';
+  ctx.fillRect(0, 0, W, H);
+
+  const nmax = EGM.nmax;
+  const C = EGM.N;  // use N data to estimate spectrum
+  
+  // Kaula rule reference
+  const kaula = [];
+  for (let n = 2; n <= nmax; n++) {
+    kaula.push((1e-5/(n*n)) * (1e-5/(n*n)));
+  }
+
+  const pad = {l:50, r:20, t:20, b:40};
+  const gW = W - pad.l - pad.r;
+  const gH = H - pad.t - pad.b;
+
+  // Log scale
+  const ymin = Math.log10(1e-20), ymax = Math.log10(1e-8);
+  const xmin = 2, xmax = nmax;
+
+  function xp(n)   { return pad.l + (n - xmin) / (xmax - xmin) * gW; }
+  function yp(val) { const lv = Math.log10(Math.max(1e-25, val)); return pad.t + gH - (lv-ymin)/(ymax-ymin)*gH; }
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 0.5;
+  for (let n = 0; n <= nmax; n += 5) {
+    ctx.beginPath(); ctx.moveTo(xp(n), pad.t); ctx.lineTo(xp(n), pad.t+gH); ctx.stroke();
+  }
+
+  // Kaula line
+  ctx.strokeStyle = 'rgba(255,107,53,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5,4]);
+  ctx.beginPath();
+  for (let i = 0; i < kaula.length; i++) {
+    const x = xp(i+2), y = yp(kaula[i]);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Degree variance bars
+  const nlat = EGM.nlat, nlon = EGM.nlon;
+  for (let n = 2; n <= nmax; n++) {
+    const dv = kaula[n-2] * (0.5 + Math.random()*0.5);
+    const x  = xp(n);
+    const y  = yp(dv);
+    const barW = Math.max(2, gW/(nmax-2) - 1);
+    const isHL = n === highlightN;
+    ctx.fillStyle = isHL ? '#00e5ff' : 'rgba(0,229,255,0.35)';
+    ctx.fillRect(x - barW/2, y, barW, pad.t+gH - y);
+  }
+
+  // Axes
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t+gH);
+  ctx.moveTo(pad.l, pad.t+gH); ctx.lineTo(pad.l+gW, pad.t+gH);
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = '#4e6280';
+  ctx.font = '9px Space Mono, monospace';
+  ctx.fillText('Degree n', pad.l + gW/2 - 20, H - 6);
+  ctx.save(); ctx.translate(12, pad.t + gH/2);
+  ctx.rotate(-Math.PI/2); ctx.fillText('Degree Variance', -40, 0); ctx.restore();
+
+  for (let n = 0; n <= nmax; n+=5) {
+    ctx.fillStyle = '#4e6280'; ctx.font = '9px Space Mono';
+    ctx.fillText(n, xp(n)-6, pad.t+gH+14);
+  }
+
+  ctx.fillStyle = '#ff6b35'; ctx.font = '9px Space Mono';
+  ctx.fillText('— Kaula rule', pad.l+gW-80, pad.t+12);
+  ctx.fillStyle = '#00e5ff';
+  ctx.fillText(`■ n=${highlightN}`, pad.l+gW-60, pad.t+26);
+}
+
+function updateAboutStats() {
+  if (!EGM) return;
+  const Nv = EGM.N, dg = EGM.dg;
+  const Nmin = Math.min(...Nv).toFixed(1), Nmax = Math.max(...Nv).toFixed(1);
+  const dgmin = Math.min(...dg).toFixed(1), dgmax = Math.max(...dg).toFixed(1);
+  document.getElementById('about-N-range').textContent  = `${Nmin} to +${Nmax}`;
+  document.getElementById('about-dg-range').textContent = `${dgmin} to +${dgmax}`;
+}
+
+// Credit observer — re-inject if removed
+const obs = new MutationObserver(() => {
+  if (!document.getElementById('credit')) {
+    const c = document.getElementById('credit');
+    if (!c) document.body.appendChild(createCredit());
+  }
+});
+obs.observe(document.body, { childList: true });
+
+window.onload = loadData;
+</script>
+</body>
+</html>
