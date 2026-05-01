@@ -1,5 +1,7 @@
 # SphHarm — Spherical Harmonics Visualizer
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 An interactive browser-based visualizer for Earth's gravity field using EGM96 spherical harmonic coefficients. Zero dependencies — pure HTML, CSS, and JavaScript.
 
 ![Geoid Undulation](preview.png)
@@ -63,6 +65,7 @@ python -m http.server 8080
 ## Author
 
 **Dr. Mosab Hawarey**
+>
 PhD, Geodetic & Photogrammetric Engineering (ITU) | MSc, Geomatics (Purdue) | MBA (Wales) | BSc, MSc (METU)
 
 - GitHub: https://github.com/mhawarey
